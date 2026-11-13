@@ -75,3 +75,30 @@ export function demoBrief(portfolio, quotes, news) {
   lines.push("", "### Watch list", "- Upcoming earnings dates for your holdings", "- Next inflation report and central bank commentary");
   return lines.join("\n");
 }
+
+export function demoTradeIdeas(symbols, quotes, account, maxUsd) {
+  const ideas = [];
+  const held = new Map(account.positions.map((p) => [p.symbol, p.qty]));
+  for (const s of symbols.slice(0, 3)) {
+    const price = quotes[s]?.price || demoQuote(s).price;
+    if (held.get(s) >= 2 && ideas.length === 1) {
+      ideas.push({
+        symbol: s, side: "sell", qty: 1,
+        rationale: `[Demo] Trim ${s} slightly after recent gains to lock in some profit.`,
+        risks: "You may miss further upside if the rally continues.",
+        confidence: "low",
+      });
+    } else {
+      ideas.push({
+        symbol: s, side: "buy", qty: Math.max(1, Math.floor((maxUsd * 0.5) / price)),
+        rationale: `[Demo] Positive recent headlines for ${s}; a small add keeps the position size modest.`,
+        risks: "Headlines can reverse quickly, and a single stock carries company-specific risk.",
+        confidence: "medium",
+      });
+    }
+  }
+  return {
+    summary: "[Demo] Sample suggestions from demo data. Add an ANTHROPIC_API_KEY for real AI analysis.",
+    ideas,
+  };
+}

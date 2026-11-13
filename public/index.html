@@ -36,6 +36,24 @@
         </div>
         <div id="brief" class="md muted">Get a plain-English summary of what's happening with your holdings and the market.</div>
       </div>
+
+      <div class="card" id="trade-card">
+        <div class="card-head">
+          <h2>Trade with AI</h2>
+          <span id="broker-badge" class="badge"></span>
+        </div>
+        <div id="account" class="account"></div>
+        <form id="ideas-form" class="ideas-form" autocomplete="off">
+          <input id="goal" placeholder="Optional goal, e.g. &quot;reduce risk&quot; or &quot;add to tech&quot;" maxlength="500" />
+          <button type="submit" id="ideas-btn">Get trade ideas</button>
+        </form>
+        <p class="hint">The assistant only suggests trades. Nothing is placed until you confirm each one.</p>
+        <div id="ideas"></div>
+        <details class="orders-wrap">
+          <summary>Recent orders</summary>
+          <ul id="orders" class="orders"></ul>
+        </details>
+      </div>
     </section>
 
     <section class="col">

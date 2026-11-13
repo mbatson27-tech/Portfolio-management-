@@ -2,7 +2,8 @@
 // fetches prices and news for a user's holdings, and streams an AI briefing.
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { demoQuote, demoCompanyNews, demoMarketNews, demoBrief } from "./demo.js";
+import { demoQuote, demoCompanyNews, demoMarketNews, demoBrief, demoTradeIdeas } from "./demo.js";
+import { brokerMode, getAccount, getOrders, placeOrder, MAX_ORDER_USD } from "./broker.js";
 
 const PORT = process.env.PORT || 3000;
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY || "";
@@ -167,7 +168,7 @@ function cleanPortfolio(raw) {
 
 // ---------- routes ----------
 app.get("/api/status", (_req, res) =>
-  res.json({ liveData: Boolean(FINNHUB_KEY), ai: Boolean(anthropic), model: MODEL })
+  res.json({ liveData: Boolean(FINNHUB_KEY), ai: Boolean(anthropic), model: MODEL, broker: brokerMode(), maxOrderUsd: MAX_ORDER_USD })
 );
 
 app.get("/api/quotes", async (req, res) => res.json(await getQuotes(parseSymbols(req.query.symbols))));
@@ -210,8 +211,111 @@ app.post("/api/chat", async (req, res) => {
   await streamClaude(res, messages, { webSearch: true });
 });
 
+// ---------- trading: the AI proposes, the user confirms each order ----------
+app.get("/api/broker/account", async (_req, res) => {
+  try { res.json(await getAccount()); } catch (e) { res.status(502).json({ error: e.message }); }
+});
+app.get("/api/broker/orders", async (_req, res) => {
+  try { res.json(await getOrders()); } catch (e) { res.status(502).json({ error: e.message }); }
+});
+
+const IDEAS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["summary", "ideas"],
+  properties: {
+    summary: { type: "string" },
+    ideas: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["symbol", "side", "qty", "rationale", "risks", "confidence"],
+        properties: {
+          symbol: { type: "string" },
+          side: { type: "string", enum: ["buy", "sell"] },
+          qty: { type: "integer" },
+          rationale: { type: "string" },
+          risks: { type: "string" },
+          confidence: { type: "string", enum: ["low", "medium", "high"] },
+        },
+      },
+    },
+  },
+};
+
+app.post("/api/trade/ideas", async (req, res) => {
+  const portfolio = cleanPortfolio(req.body.portfolio);
+  const goal = String(req.body.goal || "").slice(0, 500);
+  try {
+    const account = await getAccount();
+    const symbols = [...new Set([...portfolio.map((h) => h.symbol), ...account.positions.map((p) => p.symbol)])].slice(0, 25);
+    const [quotes, news] = await Promise.all([getQuotes(symbols), getNews(symbols)]);
+    let result;
+    if (!anthropic) {
+      result = demoTradeIdeas(symbols, quotes, account, MAX_ORDER_USD);
+    } else {
+      const prompt = `${buildContext(portfolio, quotes, news)}
+
+BROKER ACCOUNT (${account.mode}): cash $${account.cash.toFixed(2)}, buying power $${account.buyingPower.toFixed(2)}, equity $${account.equity.toFixed(2)}
+POSITIONS: ${account.positions.map((p) => `${p.symbol} ${p.qty} sh @ $${p.price.toFixed(2)}`).join("; ") || "none"}
+RULES: whole shares only, market orders, no short selling (sell only what is held), each order must be worth at most $${MAX_ORDER_USD}.
+${goal ? `INVESTOR'S GOAL / INSTRUCTIONS: ${goal}` : ""}
+
+Act as a careful, risk-aware portfolio analyst. Propose 0 to 4 trades that are justified by the news and the investor's positions.
+Proposing no trades is a good answer when nothing is compelling; don't trade for the sake of it. Prefer small, diversified adjustments.
+For each idea give a short rationale citing the specific news, the main risks, and an honest confidence level.
+The investor reviews and approves each trade themselves. "summary" is a 1-2 sentence overview.`;
+      const msg = await anthropic.beta.messages.create({
+        model: MODEL,
+        max_tokens: 16000,
+        system: SYSTEM,
+        output_config: { effort: "high", format: { type: "json_schema", schema: IDEAS_SCHEMA } },
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        messages: [{ role: "user", content: prompt }],
+      });
+      if (msg.stop_reason === "refusal") return res.status(422).json({ error: "The assistant declined to suggest trades." });
+      const text = msg.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+      result = JSON.parse(text);
+    }
+    // Server-side checks so a bad suggestion is flagged before it reaches the confirm button.
+    result.ideas = (result.ideas || []).slice(0, 6).map((i) => {
+      const symbol = String(i.symbol).toUpperCase();
+      const price = quotes[symbol]?.price ?? (account.mode === "simulated" ? demoQuote(symbol).price : null);
+      const held = account.positions.find((p) => p.symbol === symbol)?.qty || 0;
+      const est = price ? price * i.qty : null;
+      let problem = null;
+      if (!price) problem = "No current price available.";
+      else if (est > MAX_ORDER_USD) problem = `About $${est.toFixed(0)}, above your $${MAX_ORDER_USD} per-order limit.`;
+      else if (i.side === "sell" && i.qty > held) problem = `You only hold ${held} shares in the broker account.`;
+      return { ...i, symbol, price, estValue: est, problem };
+    });
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(502).json({ error: e instanceof Anthropic.APIError ? `AI error (${e.status}): ${e.message}` : e.message });
+  }
+});
+
+// Executes ONE order the user has explicitly confirmed in the UI.
+app.post("/api/trade/execute", async (req, res) => {
+  if (req.body.confirmed !== true) return res.status(400).json({ error: "Order must be confirmed by the user." });
+  try {
+    const symbol = String(req.body.symbol || "").toUpperCase();
+    const q = (await getQuotes([symbol]))[symbol];
+    const price = q?.price ?? (brokerMode() === "simulated" ? demoQuote(symbol).price : null);
+    const order = await placeOrder({ symbol, side: req.body.side, qty: req.body.qty }, price);
+    console.log(`[trade] ${brokerMode()} ${order.side} ${order.qty} ${order.symbol} -> ${order.status}`);
+    res.json(order);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Portfolio Pulse running at http://localhost:${PORT}`);
   console.log(`  Market data: ${FINNHUB_KEY ? "live (Finnhub)" : "DEMO (set FINNHUB_API_KEY for live data)"}`);
   console.log(`  AI assistant: ${anthropic ? MODEL : "DEMO (set ANTHROPIC_API_KEY to enable)"}`);
+  console.log(`  Trading: ${brokerMode().toUpperCase()}${brokerMode() === "live" ? " (REAL MONEY)" : ""}, max $${MAX_ORDER_USD} per order`);
 });

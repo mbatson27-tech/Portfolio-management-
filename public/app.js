@@ -185,3 +185,108 @@ fetch("/api/status").then((r) => r.json()).then((s) => {
 
 refresh();
 setInterval(refresh, 5 * 60 * 1000);
+
+// ---------- trading: AI suggests, user confirms each order ----------
+let ideas = [];
+let brokerInfo = { broker: "simulated", maxOrderUsd: 1000 };
+
+async function loadAccount() {
+  const [acct, orders] = await Promise.all([
+    fetch("/api/broker/account").then((r) => r.json()).catch((e) => ({ error: e.message })),
+    fetch("/api/broker/orders").then((r) => r.json()).catch(() => []),
+  ]);
+  if (acct.error) { $("#account").innerHTML = `<p class="warn">Broker error: ${esc(acct.error)}</p>`; return; }
+  const pos = acct.positions.length
+    ? acct.positions.map((p) => `${esc(p.symbol)} ${p.qty}`).join(" · ")
+    : "No positions yet";
+  $("#account").innerHTML = `
+    <div class="stat"><span>Cash</span><b>${money(acct.cash)}</b></div>
+    <div class="stat"><span>Buying power</span><b>${money(acct.buyingPower)}</b></div>
+    <div class="stat"><span>Account value</span><b>${money(acct.equity)}</b></div>
+    <div class="pos">Broker positions: ${pos}</div>`;
+  $("#orders").innerHTML = Array.isArray(orders) && orders.length
+    ? orders.map((o) => `<li><span class="side-${o.side}">${o.side.toUpperCase()}</span> ${o.qty} ${esc(o.symbol)} · ${esc(o.status)}${o.filledPrice ? ` @ ${money(o.filledPrice)}` : ""} · ${new Date(o.submittedAt).toLocaleString()}</li>`).join("")
+    : `<li class="muted">No orders yet.</li>`;
+}
+
+function renderIdeas(summary) {
+  const box = $("#ideas");
+  const head = summary ? `<div class="md" style="margin-top:10px">${md(summary)}</div>` : "";
+  if (!ideas.length) { box.innerHTML = head + (summary ? `<p class="muted">No trades suggested right now.</p>` : ""); return; }
+  box.innerHTML = head + ideas.map((i, n) => {
+    const label = `${i.side.toUpperCase()} ${i.qty} ${esc(i.symbol)}`;
+    let actions;
+    if (i.state === "done") actions = `<span class="confirm-text up">✓ ${esc(i.result)}</span>`;
+    else if (i.state === "error") actions = `<span class="warn">${esc(i.result)}</span> <button class="secondary" data-act="dismiss" data-n="${n}">Dismiss</button>`;
+    else if (i.state === "confirming") actions = `
+      <span class="confirm-text">Place a market order to ${label} for about ${money(i.estValue)}${brokerInfo.broker === "live" ? " with REAL money" : ""}?</span>
+      <button class="${brokerInfo.broker === "live" ? "danger" : ""}" data-act="confirm" data-n="${n}">Yes, place order</button>
+      <button class="secondary" data-act="cancel" data-n="${n}">Cancel</button>`;
+    else if (i.state === "placing") actions = `<span class="muted">Placing order…</span>`;
+    else if (i.state === "skipped") actions = `<span class="muted">Skipped</span>`;
+    else actions = i.problem
+      ? `<span class="warn">Can't place: ${esc(i.problem)}</span> <button class="secondary" data-act="skip" data-n="${n}">Dismiss</button>`
+      : `<button data-act="approve" data-n="${n}">Review order</button> <button class="secondary" data-act="skip" data-n="${n}">Skip</button>`;
+    return `<div class="idea ${i.state === "done" || i.state === "skipped" ? "done" : ""}">
+      <div class="idea-head"><strong class="side-${i.side}">${label}</strong>
+        <span class="badge">${esc(i.confidence)} confidence · ≈ ${money(i.estValue)}</span></div>
+      <p>${esc(i.rationale)}</p>
+      <p class="risk"><b>Risks:</b> ${esc(i.risks)}</p>
+      <div class="actions">${actions}</div>
+    </div>`;
+  }).join("");
+}
+let lastSummary = "";
+
+$("#ideas-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("#ideas-btn"); btn.disabled = true; btn.textContent = "Thinking…";
+  $("#ideas").innerHTML = `<p class="muted typing">Analysing your holdings and the news</p>`;
+  try {
+    const r = await fetch("/api/trade/ideas", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ portfolio, goal: $("#goal").value }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    ideas = data.ideas.map((i) => ({ ...i, state: "new" }));
+    lastSummary = data.summary;
+    renderIdeas(lastSummary);
+  } catch (err) {
+    $("#ideas").innerHTML = `<p class="warn">Couldn't get ideas: ${esc(err.message)}</p>`;
+  }
+  btn.disabled = false; btn.textContent = "Get trade ideas";
+});
+
+$("#ideas").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  const i = ideas[+b.dataset.n];
+  const act = b.dataset.act;
+  if (act === "approve") i.state = "confirming";
+  else if (act === "cancel") i.state = "new";
+  else if (act === "skip" || act === "dismiss") i.state = "skipped";
+  else if (act === "confirm") {
+    i.state = "placing"; renderIdeas(lastSummary);
+    try {
+      const r = await fetch("/api/trade/execute", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: i.symbol, side: i.side, qty: i.qty, confirmed: true }),
+      });
+      const o = await r.json();
+      if (!r.ok) throw new Error(o.error || r.statusText);
+      i.state = "done"; i.result = `Order ${o.status}${o.filledPrice ? ` at ${money(o.filledPrice)}` : ""}`;
+    } catch (err) {
+      i.state = "error"; i.result = err.message;
+    }
+    loadAccount();
+  }
+  renderIdeas(lastSummary);
+});
+
+fetch("/api/status").then((r) => r.json()).then((s) => {
+  brokerInfo = s;
+  const b = $("#broker-badge");
+  b.textContent = { simulated: "Simulated account", paper: "Alpaca paper trading", live: "LIVE: real money" }[s.broker];
+  b.className = `badge ${s.broker === "live" ? "live" : s.broker === "simulated" ? "demo" : ""}`;
+});
+loadAccount();
