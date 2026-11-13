@@ -21,11 +21,11 @@
           <input id="shares" type="number" min="0" step="any" placeholder="Shares (optional)" />
           <button type="submit">Add</button>
         </form>
-        <table class="holdings">
+        <div class="table-wrap"><table class="holdings">
           <thead><tr><th>Ticker</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Today</th><th class="num">Value</th><th></th></tr></thead>
           <tbody id="holdings-body"></tbody>
           <tfoot><tr><td colspan="4">Total</td><td class="num" id="total-value">–</td><td></td></tr></tfoot>
-        </table>
+        </table></div>
         <p id="empty-hint" class="hint">Add the tickers you own. They're saved in this browser only.</p>
       </div>
 

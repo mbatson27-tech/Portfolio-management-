@@ -35,6 +35,9 @@ Without a key, that part of the app runs in demo mode (trading uses a simulated 
 - Every order is checked server-side: whole shares, market orders only, no short selling, and a per-order cap (`MAX_ORDER_USD`, default $1,000).
 - AI suggestions can be wrong. News can be stale or misread, and market orders can fill at a different price than shown. Try it on paper for a while before considering real money.
 
+## Preview build
+`node preview/build.mjs` writes a single-file, no-server preview (sample data only) to `preview/dist/index.html`. It runs the real front end against a browser stand-in for the API (`preview/mock-api.js`).
+
 ## How it works
 - `server.js`: Express server. Keeps keys server-side, calls Finnhub (with a short cache), and streams Claude responses to the browser.
 - `broker.js`: Alpaca client, simulated account, and order safety checks.
