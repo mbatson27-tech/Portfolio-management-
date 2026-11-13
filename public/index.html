@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Portfolio Pulse</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="dot"></span> Portfolio Pulse</div>
+      <div class="pf-switch">
+        <label for="pf-select">Portfolio</label>
+        <select id="pf-select"></select>
+        <button id="pf-new" class="secondary small" type="button">+ New</button>
+        <button id="pf-rename" class="ghost small" type="button">Rename</button>
+        <button id="pf-delete" class="ghost small" type="button">Delete</button>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+    <div id="pf-panel" class="pf-panel" hidden></div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#overview" data-view="overview">Overview</a>
+      <a href="#news" data-view="news">News &amp; briefing</a>
+      <a href="#assistant" data-view="assistant">Ask AI</a>
+      <a href="#trade" data-view="trade">Trade</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <!-- ================= OVERVIEW ================= -->
+    <section id="view-overview" class="view">
+      <div class="kpis" id="kpis"></div>
+
+      <div class="grid grid-main">
+        <div class="card holdings-card">
+          <div class="card-head">
+            <h2>Holdings</h2>
+            <span class="hint" id="holdings-count"></span>
+          </div>
+          <form id="add-form" class="add-form" autocomplete="off">
+            <div class="field ticker-field">
+              <label for="symbol">Stock or ETF</label>
+              <input id="symbol" placeholder="Search, e.g. Apple or AAPL" maxlength="30" required
+                     role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest" />
+              <ul id="suggest" class="suggest" role="listbox" hidden></ul>
+            </div>
+            <div class="field">
+              <label for="shares">Shares</label>
+              <input id="shares" type="number" min="0" step="any" placeholder="10" />
+            </div>
+            <div class="field">
+              <label for="cost">Avg cost / share</label>
+              <input id="cost" type="number" min="0" step="any" placeholder="Optional" />
+            </div>
+            <button type="submit" id="add-btn">Add</button>
+          </form>
+          <div class="table-wrap">
+            <table class="holdings">
+              <thead><tr>
+                <th>Stock</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Today</th>
+                <th class="num">Value</th><th class="num hide-sm">Gain / loss</th><th class="num hide-sm">Weight</th><th></th>
+              </tr></thead>
+              <tbody id="holdings-body"></tbody>
+            </table>
+          </div>
+          <p id="empty-hint" class="hint">This portfolio is empty. Search for a stock above to add it.</p>
+          <p class="hint">Click a row to see its chart. Adding a stock that's already here updates it.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Allocation</h2><span class="hint">by current value</span></div>
+          <div class="donut-wrap">
+            <canvas id="alloc-chart" aria-label="Allocation by holding" role="img"></canvas>
+            <div class="donut-center" id="alloc-center"></div>
+          </div>
+          <ul id="alloc-legend" class="legend"></ul>
+        </div>
+      </div>
+
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-head">
+            <h2>Portfolio value</h2>
+            <div class="seg" id="perf-range" role="group" aria-label="Time range"></div>
+          </div>
+          <div class="chart-head" id="perf-head"></div>
+          <div class="chart-box"><canvas id="perf-chart" aria-label="Portfolio value over time" role="img"></canvas></div>
+          <p class="hint" id="perf-note"></p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2 id="detail-title">Stock chart</h2>
+            <div class="seg" id="detail-range" role="group" aria-label="Time range"></div>
+          </div>
+          <div class="chart-head" id="detail-head"></div>
+          <div class="chart-box"><canvas id="detail-chart" aria-label="Price history" role="img"></canvas></div>
+          <div class="stats" id="detail-stats"></div>
+          <ul class="news compact" id="detail-news"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= NEWS ================= -->
+    <section id="view-news" class="view" hidden>
+      <div class="grid grid-2">
+        <div class="card">
+          <div class="card-head">
+            <h2>News</h2>
+            <div class="tabs" role="tablist">
+              <button class="tab active" data-tab="holdings" type="button">My holdings</button>
+              <button class="tab" data-tab="market" type="button">Market</button>
+            </div>
+          </div>
+          <div id="news-filter" class="chips"></div>
+          <ul id="news" class="news"></ul>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h2>AI briefing</h2>
+            <button id="brief-btn" class="secondary" type="button">Generate briefing</button>
+          </div>
+          <div id="brief" class="md muted">Get a plain-English summary of what's happening with this portfolio and the market.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ASSISTANT ================= -->
+    <section id="view-assistant" class="view" hidden>
+      <div class="card chat-card">
+        <h2>Ask the assistant</h2>
+        <div id="chat-log" class="chat-log">
+          <div class="msg assistant md">Ask anything about your holdings or the market, like "Why is NVDA moving today?" or "What should I watch this week?"</div>
+        </div>
+        <div class="chips" id="chat-suggest"></div>
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input" placeholder="Ask about your stocks or the market…" autocomplete="off" />
+          <button type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ================= TRADE ================= -->
+    <section id="view-trade" class="view" hidden>
+      <div class="card" id="trade-card">
+        <div class="card-head">
+          <h2>Trade with AI</h2>
+          <span id="broker-badge" class="badge"></span>
+        </div>
+        <div id="account" class="account"></div>
+        <form id="ideas-form" class="ideas-form" autocomplete="off">
+          <input id="goal" placeholder="Optional goal, e.g. &quot;reduce risk&quot; or &quot;add to tech&quot;" maxlength="500" />
+          <button type="submit" id="ideas-btn">Get trade ideas</button>
+        </form>
+        <p class="hint">The assistant only suggests trades. Nothing is placed until you confirm each one.</p>
+        <div id="ideas"></div>
+        <details class="orders-wrap">
+          <summary>Recent orders</summary>
+          <ul id="orders" class="orders"></ul>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">For information only, not financial advice. Prices may be delayed.</footer>
+  <script src="/vendor/chart.umd.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

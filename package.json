@@ -1,0 +1,22 @@
+{
+  "name": "portfolio-pulse",
+  "version": "1.0.0",
+  "description": "Enter your portfolio; get news on your holdings and the market, with an AI briefing and chat.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --watch --env-file-if-exists=.env server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "chart.js": "^4.4.1",
+    "express": "^4.22.3"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20.12"
+  }
+}
