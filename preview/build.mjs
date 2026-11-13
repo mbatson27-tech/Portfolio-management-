@@ -6,7 +6,8 @@ const root = new URL("..", import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), "utf8");
 
 const html = read("public/index.html");
-const body = html.match(/<body>([\s\S]*)<\/body>/)[1].replace(/<script src="app.js"><\/script>/, "");
+const body = html.match(/<body>([\s\S]*)<\/body>/)[1].replace(/<script src="[^"]+"><\/script>/g, "");
+const chartjs = read("node_modules/chart.js/dist/chart.umd.js").replace(/<\/script/gi, "<\\/script");
 const css = read("public/styles.css");
 const demo = read("demo.js").replace(/^export /gm, "");
 const mock = read("preview/mock-api.js");
@@ -18,10 +19,12 @@ const out = `<title>Portfolio Pulse</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 ${css}
-.preview-banner { background: var(--demo-bg); color: var(--demo-fg); text-align: center; font-size: 13px; padding-block: 6px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 </style>
 ${banner}
 ${body}
+<script>
+${chartjs}
+</script>
 <script>
 (() => {
 ${demo}

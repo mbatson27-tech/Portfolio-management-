@@ -2,17 +2,20 @@
 // fetches prices and news for a user's holdings, and streams an AI briefing.
 import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { demoQuote, demoCompanyNews, demoMarketNews, demoBrief, demoTradeIdeas } from "./demo.js";
+import { demoQuote, demoCompanyNews, demoMarketNews, demoBrief, demoTradeIdeas, demoHistory, demoSearch, RANGE_DAYS } from "./demo.js";
 import { brokerMode, getAccount, getOrders, placeOrder, MAX_ORDER_USD } from "./broker.js";
 
 const PORT = process.env.PORT || 3000;
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY || "";
+const TWELVEDATA_KEY = process.env.TWELVEDATA_API_KEY || "";
 const MODEL = process.env.CLAUDE_MODEL || "claude-opus-5-5";
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static("public"));
+// Chart.js is served from the installed package, so the app needs no CDN.
+app.get("/vendor/chart.umd.js", (_req, res) => res.sendFile("chart.umd.js", { root: "node_modules/chart.js/dist" }));
 
 // ---------- helpers ----------
 const SYMBOL_RE = /^[A-Z0-9.\-]{1,10}$/;
@@ -174,6 +177,48 @@ app.get("/api/status", (_req, res) =>
 app.get("/api/quotes", async (req, res) => res.json(await getQuotes(parseSymbols(req.query.symbols))));
 
 app.get("/api/news", async (req, res) => res.json(await getNews(parseSymbols(req.query.symbols))));
+
+// Daily closing prices for charts. Twelve Data (free tier) when keyed, demo data otherwise.
+const historyCache = new Map();
+app.get("/api/history", async (req, res) => {
+  const [symbol] = parseSymbols(req.query.symbol);
+  const range = RANGE_DAYS[req.query.range] ? req.query.range : "3M";
+  if (!symbol) return res.status(400).json({ error: "Missing symbol." });
+  if (!TWELVEDATA_KEY) return res.json({ symbol, range, demo: true, points: demoHistory(symbol, range) });
+  const key = `${symbol}:${range}`;
+  const hit = historyCache.get(key);
+  if (hit && Date.now() - hit.t < 30 * 60_000) return res.json(hit.v);
+  try {
+    const qs = new URLSearchParams({ symbol, interval: "1day", outputsize: String(RANGE_DAYS[range]), apikey: TWELVEDATA_KEY });
+    const data = await fetch(`https://api.twelvedata.com/time_series?${qs}`).then((r) => r.json());
+    if (data.status === "error") throw new Error(data.message);
+    const points = data.values.map((v) => ({ t: v.datetime.slice(0, 10), c: Number(v.close) })).reverse();
+    const v = { symbol, range, points };
+    historyCache.set(key, { t: Date.now(), v });
+    res.json(v);
+  } catch (e) {
+    res.status(502).json({ error: `Price history unavailable: ${e.message}` });
+  }
+});
+
+// Ticker search for the "add stock" box. Finnhub when keyed, a built-in list otherwise.
+app.get("/api/search", async (req, res) => {
+  const q = String(req.query.q || "").trim().slice(0, 30);
+  if (!q) return res.json([]);
+  if (!FINNHUB_KEY) return res.json(demoSearch(q));
+  try {
+    const data = await finnhub("search", { q }, 24 * 3600_000);
+    res.json(
+      (data.result || [])
+        .filter((r) => r.type === "Common Stock" || r.type === "ETP" || r.type === "ETF")
+        .filter((r) => SYMBOL_RE.test(r.symbol))
+        .slice(0, 8)
+        .map((r) => ({ symbol: r.symbol, name: r.description }))
+    );
+  } catch {
+    res.json(demoSearch(q));
+  }
+});
 
 app.post("/api/brief", async (req, res) => {
   const portfolio = cleanPortfolio(req.body.portfolio);

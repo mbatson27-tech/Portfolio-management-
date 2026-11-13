@@ -102,3 +102,56 @@ export function demoTradeIdeas(symbols, quotes, account, maxUsd) {
     ideas,
   };
 }
+
+// ---------- price history & ticker search (demo) ----------
+export const RANGE_DAYS = { "1M": 22, "3M": 64, "6M": 128, "1Y": 252 };
+
+// Business days ending today, oldest first (shared by every symbol so portfolio sums line up).
+function tradingDays(n) {
+  const out = [];
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  while (out.length < n) {
+    const wd = d.getUTCDay();
+    if (wd !== 0 && wd !== 6) out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return out.reverse();
+}
+
+// A seeded random walk that ends exactly at today's demo price.
+export function demoHistory(symbol, range = "3M") {
+  const n = RANGE_DAYS[range] || RANGE_DAYS["3M"];
+  const days = tradingDays(RANGE_DAYS["1Y"]);
+  const r = seed("hist" + symbol);
+  const drift = (r() - 0.4) * 0.002;
+  const vol = 0.008 + r() * 0.012;
+  const rets = days.map(() => drift + (r() + r() + r() - 1.5) * vol);
+  const end = demoQuote(symbol).price;
+  const closes = new Array(days.length);
+  closes[days.length - 1] = end;
+  for (let i = days.length - 2; i >= 0; i--) closes[i] = closes[i + 1] / (1 + rets[i + 1]);
+  return days.map((t, i) => ({ t, c: Math.round(closes[i] * 100) / 100 })).slice(-n);
+}
+
+export const POPULAR = [
+  ["AAPL", "Apple Inc."], ["MSFT", "Microsoft Corp."], ["NVDA", "NVIDIA Corp."], ["AMZN", "Amazon.com Inc."],
+  ["GOOGL", "Alphabet Inc. Class A"], ["META", "Meta Platforms Inc."], ["TSLA", "Tesla Inc."], ["BRK.B", "Berkshire Hathaway Class B"],
+  ["JPM", "JPMorgan Chase & Co."], ["V", "Visa Inc."], ["MA", "Mastercard Inc."], ["UNH", "UnitedHealth Group"],
+  ["JNJ", "Johnson & Johnson"], ["PG", "Procter & Gamble"], ["XOM", "Exxon Mobil Corp."], ["CVX", "Chevron Corp."],
+  ["HD", "Home Depot Inc."], ["KO", "Coca-Cola Co."], ["PEP", "PepsiCo Inc."], ["COST", "Costco Wholesale"],
+  ["WMT", "Walmart Inc."], ["DIS", "Walt Disney Co."], ["NFLX", "Netflix Inc."], ["AMD", "Advanced Micro Devices"],
+  ["INTC", "Intel Corp."], ["AVGO", "Broadcom Inc."], ["CRM", "Salesforce Inc."], ["ADBE", "Adobe Inc."],
+  ["ORCL", "Oracle Corp."], ["BAC", "Bank of America"], ["NKE", "Nike Inc."], ["MCD", "McDonald's Corp."],
+  ["PFE", "Pfizer Inc."], ["LLY", "Eli Lilly & Co."], ["T", "AT&T Inc."], ["VZ", "Verizon Communications"],
+  ["VOO", "Vanguard S&P 500 ETF"], ["SPY", "SPDR S&P 500 ETF"], ["QQQ", "Invesco QQQ Trust"], ["VTI", "Vanguard Total Stock Market ETF"],
+  ["SCHD", "Schwab US Dividend Equity ETF"], ["VXUS", "Vanguard Total International Stock ETF"], ["BND", "Vanguard Total Bond Market ETF"], ["GLD", "SPDR Gold Shares"],
+];
+
+export function demoSearch(q) {
+  q = String(q || "").trim().toUpperCase();
+  if (!q) return [];
+  const hits = POPULAR.filter(([s, n]) => s.startsWith(q) || n.toUpperCase().includes(q));
+  hits.sort((a, b) => (b[0].startsWith(q) ? 1 : 0) - (a[0].startsWith(q) ? 1 : 0) || a[0].length - b[0].length);
+  return hits.slice(0, 8).map(([symbol, name]) => ({ symbol, name }));
+}

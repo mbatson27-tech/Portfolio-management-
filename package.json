@@ -12,6 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "chart.js": "^4.4.1",
     "express": "^4.22.3"
   },
   "type": "module",

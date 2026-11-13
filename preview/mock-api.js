@@ -72,6 +72,13 @@ window.fetch = async (input, init = {}) => {
       return json(quotesFor(symbolsOf(url)));
     case "/api/news":
       return json(newsFor(symbolsOf(url)));
+    case "/api/history": {
+      const symbol = (url.searchParams.get("symbol") || "").toUpperCase();
+      const range = url.searchParams.get("range") || "3M";
+      return json({ symbol, range, demo: true, points: demoHistory(symbol, range) });
+    }
+    case "/api/search":
+      return json(demoSearch(url.searchParams.get("q")));
     case "/api/brief": {
       if (!portfolio.length) return json({ error: "Add at least one holding." }, 400);
       const syms = portfolio.map((h) => h.symbol);
@@ -108,11 +115,26 @@ window.fetch = async (input, init = {}) => {
   }
 };
 
-// Start first-time visitors with an example portfolio so the preview isn't empty.
+// Start first-time visitors with example portfolios so the preview isn't empty.
 try {
-  if (!localStorage.getItem("portfolio-pulse:holdings")) {
-    localStorage.setItem("portfolio-pulse:holdings", JSON.stringify([
-      { symbol: "AAPL", shares: 10 }, { symbol: "NVDA", shares: 5 }, { symbol: "VOO", shares: 12 },
-    ]));
+  if (!localStorage.getItem("portfolio-pulse:v2")) {
+    const ex = (symbol, name, shares, f) => ({ symbol, name, shares, cost: Math.round(demoQuote(symbol).price * f * 100) / 100 });
+    localStorage.setItem("portfolio-pulse:v2", JSON.stringify({
+      active: "ex1",
+      portfolios: [
+        { id: "ex1", name: "Example: Long-term", holdings: [
+          ex("VOO", "Vanguard S&P 500 ETF", 12, 0.82),
+          ex("AAPL", "Apple Inc.", 10, 0.9),
+          ex("MSFT", "Microsoft Corp.", 6, 1.06),
+          ex("JNJ", "Johnson & Johnson", 8, 0.95),
+          ex("KO", "Coca-Cola Co.", 20, 0.88),
+        ] },
+        { id: "ex2", name: "Example: Tech picks", holdings: [
+          ex("NVDA", "NVIDIA Corp.", 5, 0.7),
+          ex("AMD", "Advanced Micro Devices", 8, 1.12),
+          ex("GOOGL", "Alphabet Inc. Class A", 4, 0.93),
+        ] },
+      ],
+    }));
   }
 } catch {}
