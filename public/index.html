@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Portfolio Pulse</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> Portfolio Pulse</div>
+    <div id="status" class="status"></div>
+  </header>
+
+  <main class="layout">
+    <section class="col">
+      <div class="card">
+        <h2>Your portfolio</h2>
+        <form id="add-form" class="add-form" autocomplete="off">
+          <input id="symbol" placeholder="Ticker, e.g. AAPL" maxlength="10" required />
+          <input id="shares" type="number" min="0" step="any" placeholder="Shares (optional)" />
+          <button type="submit">Add</button>
+        </form>
+        <table class="holdings">
+          <thead><tr><th>Ticker</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Today</th><th class="num">Value</th><th></th></tr></thead>
+          <tbody id="holdings-body"></tbody>
+          <tfoot><tr><td colspan="4">Total</td><td class="num" id="total-value">–</td><td></td></tr></tfoot>
+        </table>
+        <p id="empty-hint" class="hint">Add the tickers you own. They're saved in this browser only.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>AI briefing</h2>
+          <button id="brief-btn" class="secondary">Generate briefing</button>
+        </div>
+        <div id="brief" class="md muted">Get a plain-English summary of what's happening with your holdings and the market.</div>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="card">
+        <div class="card-head">
+          <h2>News</h2>
+          <div class="tabs" role="tablist">
+            <button class="tab active" data-tab="holdings">My holdings</button>
+            <button class="tab" data-tab="market">Market</button>
+          </div>
+        </div>
+        <div id="news-filter" class="chips"></div>
+        <ul id="news" class="news"></ul>
+      </div>
+
+      <div class="card chat-card">
+        <h2>Ask the assistant</h2>
+        <div id="chat-log" class="chat-log">
+          <div class="msg assistant md">Ask anything about your holdings or the market, like "Why is NVDA moving today?" or "What should I watch this week?"</div>
+        </div>
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input" placeholder="Ask about your stocks or the market…" autocomplete="off" />
+          <button type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">For information only, not financial advice. Prices may be delayed.</footer>
+  <script src="app.js"></script>
+</body>
+</html>
